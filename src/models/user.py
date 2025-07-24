@@ -1,4 +1,4 @@
-from src.models.database import db, BaseModel
+from .database import db, BaseModel
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import enum
@@ -63,7 +63,7 @@ class User(BaseModel):
 class UserAddress(BaseModel):
     __tablename__ = 'user_addresses'
     
-    user_id = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
     # Location Information
     country = db.Column(db.String(100), default='Yemen', nullable=False)
@@ -87,4 +87,3 @@ class UserAddress(BaseModel):
     
     def __repr__(self):
         return f'<UserAddress {self.district}, {self.city}>'
-
