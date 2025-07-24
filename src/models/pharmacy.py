@@ -7,6 +7,16 @@ class PharmacyStatus(enum.Enum):
     VERIFIED = 'verified'
     SUSPENDED = 'suspended'
     REJECTED = 'rejected'
+    
+class VerificationStatus(enum.Enum):
+    PENDING   = 'pending'
+    APPROVED  = 'approved'
+    REJECTED  = 'rejected'
+
+class DocumentType(enum.Enum):
+    LICENSE          = 'license'
+    TAX_CERTIFICATE  = 'tax_certificate'
+    OTHER            = 'other'
 
 class Pharmacy(BaseModel):
     __tablename__ = 'pharmacies'
