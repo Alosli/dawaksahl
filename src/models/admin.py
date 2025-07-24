@@ -1,223 +1,244 @@
-from src.models.database import db, BaseModel
+from .database import db, BaseModel
+from datetime import datetime
 import enum
 
-class SettingType(enum.Enum):
-    STRING = 'string'
-    NUMBER = 'number'
-    BOOLEAN = 'boolean'
-    JSON = 'json'
+class AuditAction(enum.Enum):
+    CREATE = 'create'
+    UPDATE = 'update'
+    DELETE = 'delete'
+    LOGIN = 'login'
+    LOGOUT = 'logout'
+    APPROVE = 'approve'
+    REJECT = 'reject'
+    SUSPEND = 'suspend'
+    ACTIVATE = 'activate'
 
 class District(BaseModel):
     __tablename__ = 'districts'
     
-    # District Information
-    district_name = db.Column(db.String(100), nullable=False)
-    district_name_ar = db.Column(db.String(100), nullable=False)
-    city = db.Column(db.String(100), default='Taiz', nullable=False)
-    country = db.Column(db.String(100), default='Yemen', nullable=False)
+    # Basic Information
+    name = db.Column(db.String(100), nullable=False)
+    name_ar = db.Column(db.String(100), nullable=True)
+    code = db.Column(db.String(10), unique=True, nullable=True)
     
     # Geographic Information
+    governorate = db.Column(db.String(100), default='Taiz', nullable=False)
+    governorate_ar = db.Column(db.String(100), default='تعز', nullable=False)
+    
+    # Coordinates (center point of district)
     latitude = db.Column(db.Numeric(10, 8), nullable=True)
     longitude = db.Column(db.Numeric(11, 8), nullable=True)
     
-    # Status and Ordering
+    # Administrative Information
+    population = db.Column(db.Integer, nullable=True)
+    area_km2 = db.Column(db.Numeric(10, 2), nullable=True)
+    
+    # Status
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    delivery_available = db.Column(db.Boolean, default=True, nullable=False)
     
     def to_dict(self):
         """Convert to dictionary"""
         data = super().to_dict()
         data['latitude'] = float(data['latitude']) if data['latitude'] else None
         data['longitude'] = float(data['longitude']) if data['longitude'] else None
+        data['area_km2'] = float(data['area_km2']) if data['area_km2'] else None
+        data['pharmacy_count'] = len(self.pharmacies) if hasattr(self, 'pharmacies') else 0
         return data
     
     def __repr__(self):
-        return f'<District {self.district_name}>'
+        return f'<District {self.name}>'
 
 class SystemSetting(BaseModel):
     __tablename__ = 'system_settings'
     
     # Setting Information
-    setting_key = db.Column(db.String(100), unique=True, nullable=False)
-    setting_value = db.Column(db.Text, nullable=True)
-    setting_type = db.Column(db.Enum(SettingType), default=SettingType.STRING, nullable=False)
-    description = db.Column(db.Text, nullable=True)
+    key = db.Column(db.String(100), unique=True, nullable=False)
+    value = db.Column(db.Text, nullable=True)
+    data_type = db.Column(db.String(20), default='string', nullable=False)  # string, integer, boolean, json
     
-    # Visibility
-    is_public = db.Column(db.Boolean, default=False, nullable=False)
+    # Metadata
+    category = db.Column(db.String(50), nullable=False)  # general, payment, delivery, etc.
+    description = db.Column(db.Text, nullable=True)
+    description_ar = db.Column(db.Text, nullable=True)
+    
+    # Access Control
+    is_public = db.Column(db.Boolean, default=False, nullable=False)  # Can be accessed by frontend
+    is_editable = db.Column(db.Boolean, default=True, nullable=False)  # Can be modified
+    
+    def get_typed_value(self):
+        """Get value converted to appropriate type"""
+        if self.data_type == 'integer':
+            return int(self.value) if self.value else 0
+        elif self.data_type == 'boolean':
+            return self.value.lower() in ['true', '1', 'yes'] if self.value else False
+        elif self.data_type == 'json':
+            import json
+            return json.loads(self.value) if self.value else {}
+        else:
+            return self.value
+    
+    def set_typed_value(self, value):
+        """Set value with type conversion"""
+        if self.data_type == 'json':
+            import json
+            self.value = json.dumps(value)
+        else:
+            self.value = str(value)
     
     def to_dict(self):
         """Convert to dictionary"""
         data = super().to_dict()
-        data['setting_type'] = self.setting_type.value if self.setting_type else None
+        data['typed_value'] = self.get_typed_value()
         return data
     
-    def get_typed_value(self):
-        """Get value converted to appropriate type"""
-        if self.setting_value is None:
-            return None
-        
-        if self.setting_type == SettingType.BOOLEAN:
-            return self.setting_value.lower() in ('true', '1', 'yes', 'on')
-        elif self.setting_type == SettingType.NUMBER:
-            try:
-                if '.' in self.setting_value:
-                    return float(self.setting_value)
-                else:
-                    return int(self.setting_value)
-            except ValueError:
-                return None
-        elif self.setting_type == SettingType.JSON:
-            try:
-                import json
-                return json.loads(self.setting_value)
-            except (json.JSONDecodeError, TypeError):
-                return None
-        else:
-            return self.setting_value
-    
-    def set_typed_value(self, value):
-        """Set value from typed input"""
-        if value is None:
-            self.setting_value = None
-        elif self.setting_type == SettingType.JSON:
-            import json
-            self.setting_value = json.dumps(value)
-        else:
-            self.setting_value = str(value)
-    
     def __repr__(self):
-        return f'<SystemSetting {self.setting_key}>'
+        return f'<SystemSetting {self.key}>'
 
 class AuditLog(BaseModel):
     __tablename__ = 'audit_logs'
     
     # User and Action Information
-    user_id = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=True)
-    action_type = db.Column(db.String(100), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    action = db.Column(db.Enum(AuditAction), nullable=False)
     
     # Target Information
-    table_name = db.Column(db.String(100), nullable=True, index=True)
-    record_id = db.Column(db.String(36), nullable=True, index=True)
+    target_type = db.Column(db.String(50), nullable=False)  # user, pharmacy, product, order, etc.
+    target_id = db.Column(db.String(50), nullable=True)  # ID of the affected object
     
-    # Change Information
-    old_values = db.Column(db.JSON, nullable=True)
-    new_values = db.Column(db.JSON, nullable=True)
+    # Details
+    description = db.Column(db.Text, nullable=False)
+    old_values = db.Column(db.Text, nullable=True)  # JSON string of old values
+    new_values = db.Column(db.Text, nullable=True)  # JSON string of new values
     
     # Request Information
-    ip_address = db.Column(db.String(45), nullable=True)  # IPv6 compatible
+    ip_address = db.Column(db.String(45), nullable=True)  # IPv4 or IPv6
     user_agent = db.Column(db.Text, nullable=True)
+    request_method = db.Column(db.String(10), nullable=True)  # GET, POST, etc.
+    request_url = db.Column(db.Text, nullable=True)
     
     # Relationships
     user = db.relationship('User', backref='audit_logs')
     
+    @classmethod
+    def log_action(cls, user_id, action, target_type, target_id, description, 
+                   old_values=None, new_values=None, ip_address=None, user_agent=None,
+                   request_method=None, request_url=None):
+        """Create an audit log entry"""
+        import json
+        
+        log_entry = cls(
+            user_id=user_id,
+            action=action,
+            target_type=target_type,
+            target_id=str(target_id) if target_id else None,
+            description=description,
+            old_values=json.dumps(old_values) if old_values else None,
+            new_values=json.dumps(new_values) if new_values else None,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_method=request_method,
+            request_url=request_url
+        )
+        
+        db.session.add(log_entry)
+        return log_entry
+    
+    def get_old_values_dict(self):
+        """Get old values as dictionary"""
+        if self.old_values:
+            import json
+            return json.loads(self.old_values)
+        return {}
+    
+    def get_new_values_dict(self):
+        """Get new values as dictionary"""
+        if self.new_values:
+            import json
+            return json.loads(self.new_values)
+        return {}
+    
+    def to_dict(self):
+        """Convert to dictionary"""
+        data = super().to_dict()
+        data['action'] = self.action.value if self.action else None
+        data['old_values_dict'] = self.get_old_values_dict()
+        data['new_values_dict'] = self.get_new_values_dict()
+        return data
+    
     def __repr__(self):
-        return f'<AuditLog {self.action_type} by {self.user_id}>'
+        return f'<AuditLog {self.action.value} on {self.target_type}:{self.target_id}>'
 
-# Initialize default districts for Taiz
-def initialize_default_districts():
-    """Initialize default districts for Taiz city"""
-    default_districts = [
-        {'district_name': 'Al-Qahirah', 'district_name_ar': 'القاهرة', 'sort_order': 1},
-        {'district_name': 'Salh', 'district_name_ar': 'صالح', 'sort_order': 2},
-        {'district_name': 'Al-Mudhaffar', 'district_name_ar': 'المظفر', 'sort_order': 3},
-        {'district_name': 'Al-Tiziyah', 'district_name_ar': 'التعزية', 'sort_order': 4},
-        {'district_name': 'Jabal Habashi', 'district_name_ar': 'جبل حبشي', 'sort_order': 5},
-        {'district_name': 'Maqbanah', 'district_name_ar': 'مقبنة', 'sort_order': 6},
-        {'district_name': 'Al-Silw', 'district_name_ar': 'السلو', 'sort_order': 7},
-        {'district_name': 'Dimnat Khadir', 'district_name_ar': 'دمنة خدير', 'sort_order': 8},
-        {'district_name': 'Al-Shamayatayn', 'district_name_ar': 'الشمايتين', 'sort_order': 9},
-        {'district_name': 'Mawza', 'district_name_ar': 'الموزع', 'sort_order': 10},
-        {'district_name': 'Al-Wazi\'iyah', 'district_name_ar': 'الوازعية', 'sort_order': 11},
-        {'district_name': 'Hayfan', 'district_name_ar': 'حيفان', 'sort_order': 12},
-        {'district_name': 'Mashra\'a wa Hadnan', 'district_name_ar': 'مشرعة وحدنان', 'sort_order': 13},
-        {'district_name': 'Al-Ma\'afer', 'district_name_ar': 'المعافر', 'sort_order': 14},
-        {'district_name': 'As Silw', 'district_name_ar': 'السلو', 'sort_order': 15},
-        {'district_name': 'Sama', 'district_name_ar': 'سامع', 'sort_order': 16},
-        {'district_name': 'Ash Shamayatayn', 'district_name_ar': 'الشمايتين', 'sort_order': 17},
-        {'district_name': 'At Tiziyah', 'district_name_ar': 'التعزية', 'sort_order': 18},
-        {'district_name': 'Harib', 'district_name_ar': 'حريب', 'sort_order': 19},
-        {'district_name': 'Sabir al Mawadim', 'district_name_ar': 'صبر الموادم', 'sort_order': 20},
-        {'district_name': 'Ash Sharab', 'district_name_ar': 'الشعب', 'sort_order': 21},
-        {'district_name': 'Al Misrakh', 'district_name_ar': 'المسراخ', 'sort_order': 22},
-        {'district_name': 'Al Mukha', 'district_name_ar': 'المخا', 'sort_order': 23}
-    ]
+class Notification(BaseModel):
+    __tablename__ = 'notifications'
     
-    for district_data in default_districts:
-        existing = District.query.filter_by(district_name=district_data['district_name']).first()
-        if not existing:
-            district = District(**district_data)
-            db.session.add(district)
+    # Recipient Information
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
-    db.session.commit()
-
-# Initialize default system settings
-def initialize_default_settings():
-    """Initialize default system settings"""
-    default_settings = [
-        {
-            'setting_key': 'site_name',
-            'setting_value': 'DawakSahl',
-            'setting_type': SettingType.STRING,
-            'description': 'Website name',
-            'is_public': True
-        },
-        {
-            'setting_key': 'site_name_ar',
-            'setting_value': 'دواك سهل',
-            'setting_type': SettingType.STRING,
-            'description': 'Website name in Arabic',
-            'is_public': True
-        },
-        {
-            'setting_key': 'default_language',
-            'setting_value': 'ar',
-            'setting_type': SettingType.STRING,
-            'description': 'Default language for the platform',
-            'is_public': True
-        },
-        {
-            'setting_key': 'registration_enabled',
-            'setting_value': 'true',
-            'setting_type': SettingType.BOOLEAN,
-            'description': 'Whether new user registration is enabled',
-            'is_public': True
-        },
-        {
-            'setting_key': 'pharmacy_verification_required',
-            'setting_value': 'true',
-            'setting_type': SettingType.BOOLEAN,
-            'description': 'Whether pharmacy verification is required',
-            'is_public': False
-        },
-        {
-            'setting_key': 'max_file_upload_size',
-            'setting_value': '16777216',
-            'setting_type': SettingType.NUMBER,
-            'description': 'Maximum file upload size in bytes',
-            'is_public': False
-        },
-        {
-            'setting_key': 'delivery_fee',
-            'setting_value': '500',
-            'setting_type': SettingType.NUMBER,
-            'description': 'Default delivery fee in YER',
-            'is_public': True
-        },
-        {
-            'setting_key': 'tax_rate',
-            'setting_value': '0.0',
-            'setting_type': SettingType.NUMBER,
-            'description': 'Tax rate as decimal (0.15 = 15%)',
-            'is_public': True
-        }
-    ]
+    # Notification Content
+    title = db.Column(db.String(255), nullable=False)
+    title_ar = db.Column(db.String(255), nullable=True)
+    message = db.Column(db.Text, nullable=False)
+    message_ar = db.Column(db.Text, nullable=True)
     
-    for setting_data in default_settings:
-        existing = SystemSetting.query.filter_by(setting_key=setting_data['setting_key']).first()
-        if not existing:
-            setting = SystemSetting(**setting_data)
-            db.session.add(setting)
+    # Notification Type and Priority
+    notification_type = db.Column(db.String(50), nullable=False)  # order, pharmacy, system, etc.
+    priority = db.Column(db.String(20), default='normal', nullable=False)  # low, normal, high, urgent
     
-    db.session.commit()
-
+    # Status
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
+    read_at = db.Column(db.DateTime, nullable=True)
+    
+    # Related Object
+    related_type = db.Column(db.String(50), nullable=True)  # order, pharmacy, etc.
+    related_id = db.Column(db.String(50), nullable=True)
+    
+    # Action Information
+    action_url = db.Column(db.String(500), nullable=True)
+    action_text = db.Column(db.String(100), nullable=True)
+    action_text_ar = db.Column(db.String(100), nullable=True)
+    
+    # Delivery Information
+    sent_via_email = db.Column(db.Boolean, default=False, nullable=False)
+    sent_via_sms = db.Column(db.Boolean, default=False, nullable=False)
+    sent_via_push = db.Column(db.Boolean, default=False, nullable=False)
+    
+    # Relationships
+    user = db.relationship('User', backref='notifications')
+    
+    def mark_as_read(self):
+        """Mark notification as read"""
+        self.is_read = True
+        self.read_at = datetime.utcnow()
+    
+    @classmethod
+    def create_notification(cls, user_id, title, message, notification_type,
+                          title_ar=None, message_ar=None, priority='normal',
+                          related_type=None, related_id=None, action_url=None,
+                          action_text=None, action_text_ar=None):
+        """Create a new notification"""
+        notification = cls(
+            user_id=user_id,
+            title=title,
+            title_ar=title_ar,
+            message=message,
+            message_ar=message_ar,
+            notification_type=notification_type,
+            priority=priority,
+            related_type=related_type,
+            related_id=str(related_id) if related_id else None,
+            action_url=action_url,
+            action_text=action_text,
+            action_text_ar=action_text_ar
+        )
+        
+        db.session.add(notification)
+        return notification
+    
+    def to_dict(self):
+        """Convert to dictionary"""
+        data = super().to_dict()
+        return data
+    
+    def __repr__(self):
+        return f'<Notification {self.title} for User:{self.user_id}>'
