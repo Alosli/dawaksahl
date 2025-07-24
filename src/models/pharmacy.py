@@ -121,3 +121,16 @@ class PharmacyDocument(BaseModel):
     
     def __repr__(self):
         return f'<PharmacyDocument {self.document_type} for {self.pharmacy_id}>'
+class PharmacyOperatingHours(BaseModel):
+    __tablename__ = 'pharmacy_operating_hours'
+
+    pharmacy_id = db.Column(db.Integer, db.ForeignKey('pharmacies.id'), nullable=False)
+    day_of_week = db.Column(db.String(20), nullable=False)  # e.g., 'Monday'
+    opening_time = db.Column(db.Time, nullable=False)
+    closing_time = db.Column(db.Time, nullable=False)
+    is_closed = db.Column(db.Boolean, default=False, nullable=False)
+
+    pharmacy = db.relationship('Pharmacy', backref='operating_hours')
+
+    def __repr__(self):
+        return f'<OperatingHours {self.day_of_week} for Pharmacy {self.pharmacy_id}>'
