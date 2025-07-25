@@ -2,6 +2,7 @@ from .database import db, BaseModel
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import enum
+import secrets
 
 class UserType(enum.Enum):
     CUSTOMER = 'customer'
@@ -13,20 +14,30 @@ class User(BaseModel):
     
     # Basic Information
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    phone_number = db.Column(db.String(20), unique=True, nullable=True, index=True)
+    phone = db.Column(db.String(20), nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
+    first_name_ar = db.Column(db.String(100), nullable=True)
+    last_name_ar = db.Column(db.String(100), nullable=True)
     
     # User Type and Status
     user_type = db.Column(db.Enum(UserType), nullable=False, default=UserType.CUSTOMER)
-    is_verified = db.Column(db.Boolean, default=False, nullable=False)
-    verification_token = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    
+    # Email Verification
+    email_verified = db.Column(db.Boolean, default=False, nullable=False)
+    email_verified_at = db.Column(db.DateTime, nullable=True)
+    email_verification_token = db.Column(db.String(255), nullable=True)
+    email_verification_sent_at = db.Column(db.DateTime, nullable=True)
+    
+    # Password Reset
+    password_reset_token = db.Column(db.String(255), nullable=True)
+    password_reset_sent_at = db.Column(db.DateTime, nullable=True)
     
     # Profile Information
     profile_picture_url = db.Column(db.Text, nullable=True)
-    preferred_language = db.Column(db.String(5), default='ar', nullable=False)
+    preferred_language = db.Column(db.String(5), default='en', nullable=False)
     last_login = db.Column(db.DateTime, nullable=True)
     
     # Relationships
@@ -45,15 +56,33 @@ class User(BaseModel):
     
     def get_full_name(self):
         """Get user's full name"""
-        return f"{self.first_name} {self.last_name}"
+        return f"{self.first_name} {self.last_name}".strip()
+    
+    def get_full_name_ar(self):
+        """Get user's full name in Arabic"""
+        if self.first_name_ar and self.last_name_ar:
+            return f"{self.first_name_ar} {self.last_name_ar}".strip()
+        return self.get_full_name()
+    
+    def generate_verification_token(self):
+        """Generate email verification token"""
+        self.email_verification_token = secrets.token_urlsafe(32)
+        self.email_verification_sent_at = datetime.utcnow()
+    
+    def generate_password_reset_token(self):
+        """Generate password reset token"""
+        self.password_reset_token = secrets.token_urlsafe(32)
+        self.password_reset_sent_at = datetime.utcnow()
     
     def to_dict(self, include_sensitive=False):
         """Convert to dictionary, optionally excluding sensitive data"""
         data = super().to_dict()
         if not include_sensitive:
             data.pop('password_hash', None)
-            data.pop('verification_token', None)
+            data.pop('email_verification_token', None)
+            data.pop('password_reset_token', None)
         data['full_name'] = self.get_full_name()
+        data['full_name_ar'] = self.get_full_name_ar()
         data['user_type'] = self.user_type.value if self.user_type else None
         return data
     
@@ -65,18 +94,19 @@ class UserAddress(BaseModel):
     
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
-    # Location Information
-    country = db.Column(db.String(100), default='Yemen', nullable=False)
-    city = db.Column(db.String(100), default='Taiz', nullable=False)
-    district = db.Column(db.String(100), nullable=False)
-    detailed_address = db.Column(db.Text, nullable=True)
+    # Address Information
+    label = db.Column(db.String(50), default='Home', nullable=False)
+    address_line1 = db.Column(db.String(255), nullable=False)
+    address_line2 = db.Column(db.String(255), nullable=True)
+    district_id = db.Column(db.Integer, db.ForeignKey('districts.id'), nullable=True)
+    phone = db.Column(db.String(20), nullable=True)
     
     # Coordinates
     latitude = db.Column(db.Numeric(10, 8), nullable=True)
     longitude = db.Column(db.Numeric(11, 8), nullable=True)
     
     # Status
-    is_primary = db.Column(db.Boolean, default=False, nullable=False)
+    is_default = db.Column(db.Boolean, default=False, nullable=False)
     
     def to_dict(self):
         """Convert to dictionary"""
@@ -86,4 +116,4 @@ class UserAddress(BaseModel):
         return data
     
     def __repr__(self):
-        return f'<UserAddress {self.district}, {self.city}>'
+        return f'<UserAddress {self.label}: {self.address_line1}>'
