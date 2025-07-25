@@ -115,7 +115,6 @@ def log_audit_action(user_id, action_type, target_type=None, target_id=None, des
             target_type=target_type,
             target_id=target_id,
             description=description,
-            record_id=record_id,
             old_values=old_values,
             new_values=new_values,
             ip_address=get_client_ip(),
