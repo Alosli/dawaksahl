@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import current_app, render_template_string
+from flask import current_app
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content, Attachment, FileContent, FileName, FileType, Disposition
 import base64
@@ -121,6 +121,12 @@ def send_verification_email(user_email, user_name, verification_token, language=
         base_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
         verification_url = f"{base_url}/verify-email?token={verification_token}"
         
+        # Debug logging
+        logger.info(f"Sending verification email to {user_email}")
+        logger.info(f"User name: {user_name}")
+        logger.info(f"Verification token: {verification_token}")
+        logger.info(f"Verification URL: {verification_url}")
+        
         if language == 'ar':
             subject = "تأكيد البريد الإلكتروني - دواك سهل"
             
@@ -138,7 +144,8 @@ def send_verification_email(user_email, user_name, verification_token, language=
 فريق دواك سهل
             """
             
-            html_template = """
+            # HTML content for Arabic - using string formatting instead of template
+            html_content = f"""
             <!DOCTYPE html>
             <html dir="rtl" lang="ar">
             <head>
@@ -146,38 +153,38 @@ def send_verification_email(user_email, user_name, verification_token, language=
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>تأكيد البريد الإلكتروني</title>
                 <style>
-                    body { 
+                    body {{ 
                         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
                         margin: 0; 
                         padding: 0; 
                         background-color: #f5f5f5; 
                         direction: rtl; 
-                    }
-                    .container { 
+                    }}
+                    .container {{ 
                         max-width: 600px; 
                         margin: 0 auto; 
                         background-color: white; 
                         border-radius: 10px;
                         overflow: hidden;
                         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                    }
-                    .header { 
+                    }}
+                    .header {{ 
                         background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); 
                         color: white; 
                         padding: 40px 20px; 
                         text-align: center; 
-                    }
-                    .logo { 
+                    }}
+                    .logo {{ 
                         font-size: 32px; 
                         font-weight: bold; 
                         margin-bottom: 10px; 
                         text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                    }
-                    .content { 
+                    }}
+                    .content {{ 
                         padding: 40px 20px; 
                         line-height: 1.6;
-                    }
-                    .button { 
+                    }}
+                    .button {{ 
                         display: inline-block; 
                         background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); 
                         color: white; 
@@ -187,24 +194,24 @@ def send_verification_email(user_email, user_name, verification_token, language=
                         font-weight: bold; 
                         margin: 20px 0;
                         box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
-                    }
-                    .footer { 
+                    }}
+                    .footer {{ 
                         background-color: #f8f9fa; 
                         padding: 20px; 
                         text-align: center; 
                         color: #666; 
                         font-size: 14px; 
                         border-top: 1px solid #e9ecef;
-                    }
-                    .warning { 
+                    }}
+                    .warning {{ 
                         background-color: #fff3cd; 
                         border: 1px solid #ffeaa7; 
                         padding: 15px; 
                         border-radius: 8px; 
                         margin: 20px 0; 
                         color: #856404; 
-                    }
-                    .url-box {
+                    }}
+                    .url-box {{
                         background-color: #f8f9fa;
                         border: 1px solid #dee2e6;
                         border-radius: 6px;
@@ -213,7 +220,7 @@ def send_verification_email(user_email, user_name, verification_token, language=
                         word-break: break-all;
                         font-family: monospace;
                         color: #2563eb;
-                    }
+                    }}
                 </style>
             </head>
             <body>
@@ -223,15 +230,15 @@ def send_verification_email(user_email, user_name, verification_token, language=
                         <p style="margin: 0; font-size: 16px; opacity: 0.9;">صيدليتك في تعز</p>
                     </div>
                     <div class="content">
-                        <h2 style="color: #2563eb; margin-bottom: 20px;">مرحباً {{ user_name }}!</h2>
+                        <h2 style="color: #2563eb; margin-bottom: 20px;">مرحباً {user_name}!</h2>
                         <p>شكراً لك على التسجيل في دواك سهل، منصة الصيدليات الرائدة في تعز. لإكمال عملية التسجيل وتفعيل حسابك، يرجى تأكيد بريدك الإلكتروني بالنقر على الزر أدناه:</p>
                         
                         <div style="text-align: center; margin: 30px 0;">
-                            <a href="{{ verification_url }}" class="button">تأكيد البريد الإلكتروني</a>
+                            <a href="{verification_url}" class="button">تأكيد البريد الإلكتروني</a>
                         </div>
                         
                         <p>إذا لم يعمل الزر أعلاه، يمكنك نسخ ولصق الرابط التالي في متصفحك:</p>
-                        <div class="url-box">{{ verification_url }}</div>
+                        <div class="url-box">{verification_url}</div>
                         
                         <div class="warning">
                             <strong>⏰ ملاحظة مهمة:</strong> هذا الرابط صالح لمدة 24 ساعة فقط. إذا لم تقم بتأكيد بريدك الإلكتروني خلال هذه المدة، ستحتاج إلى طلب رابط تأكيد جديد من صفحة تسجيل الدخول.
@@ -267,7 +274,8 @@ Best regards,
 The DawakSahl Team
             """
             
-            html_template = """
+            # HTML content for English - using string formatting instead of template
+            html_content = f"""
             <!DOCTYPE html>
             <html lang="en">
             <head>
@@ -275,37 +283,37 @@ The DawakSahl Team
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Email Verification</title>
                 <style>
-                    body { 
+                    body {{ 
                         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
                         margin: 0; 
                         padding: 0; 
                         background-color: #f5f5f5; 
-                    }
-                    .container { 
+                    }}
+                    .container {{ 
                         max-width: 600px; 
                         margin: 0 auto; 
                         background-color: white; 
                         border-radius: 10px;
                         overflow: hidden;
                         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                    }
-                    .header { 
+                    }}
+                    .header {{ 
                         background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); 
                         color: white; 
                         padding: 40px 20px; 
                         text-align: center; 
-                    }
-                    .logo { 
+                    }}
+                    .logo {{ 
                         font-size: 32px; 
                         font-weight: bold; 
                         margin-bottom: 10px; 
                         text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                    }
-                    .content { 
+                    }}
+                    .content {{ 
                         padding: 40px 20px; 
                         line-height: 1.6;
-                    }
-                    .button { 
+                    }}
+                    .button {{ 
                         display: inline-block; 
                         background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); 
                         color: white; 
@@ -315,24 +323,24 @@ The DawakSahl Team
                         font-weight: bold; 
                         margin: 20px 0;
                         box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
-                    }
-                    .footer { 
+                    }}
+                    .footer {{ 
                         background-color: #f8f9fa; 
                         padding: 20px; 
                         text-align: center; 
                         color: #666; 
                         font-size: 14px; 
                         border-top: 1px solid #e9ecef;
-                    }
-                    .warning { 
+                    }}
+                    .warning {{ 
                         background-color: #fff3cd; 
                         border: 1px solid #ffeaa7; 
                         padding: 15px; 
                         border-radius: 8px; 
                         margin: 20px 0; 
                         color: #856404; 
-                    }
-                    .url-box {
+                    }}
+                    .url-box {{
                         background-color: #f8f9fa;
                         border: 1px solid #dee2e6;
                         border-radius: 6px;
@@ -341,7 +349,7 @@ The DawakSahl Team
                         word-break: break-all;
                         font-family: monospace;
                         color: #2563eb;
-                    }
+                    }}
                 </style>
             </head>
             <body>
@@ -351,15 +359,15 @@ The DawakSahl Team
                         <p style="margin: 0; font-size: 16px; opacity: 0.9;">Your Pharmacy in Taiz</p>
                     </div>
                     <div class="content">
-                        <h2 style="color: #2563eb; margin-bottom: 20px;">Welcome {{ user_name }}!</h2>
+                        <h2 style="color: #2563eb; margin-bottom: 20px;">Welcome {user_name}!</h2>
                         <p>Thank you for registering with DawakSahl, the leading pharmacy platform in Taiz. To complete your registration and activate your account, please verify your email address by clicking the button below:</p>
                         
                         <div style="text-align: center; margin: 30px 0;">
-                            <a href="{{ verification_url }}" class="button">Verify Email Address</a>
+                            <a href="{verification_url}" class="button">Verify Email Address</a>
                         </div>
                         
                         <p>If the button above doesn't work, you can copy and paste the following link into your browser:</p>
-                        <div class="url-box">{{ verification_url }}</div>
+                        <div class="url-box">{verification_url}</div>
                         
                         <div class="warning">
                             <strong>⏰ Important:</strong> This verification link is valid for 24 hours only. If you don't verify your email within this time, you'll need to request a new verification link from the login page.
@@ -378,11 +386,6 @@ The DawakSahl Team
             </body>
             </html>
             """
-        
-        # Render template with variables
-        html_content = render_template_string(html_template, 
-                                            user_name=user_name,
-                                            verification_url=verification_url)
         
         return send_email(user_email, subject, html_content, text_content)
         
@@ -580,6 +583,3 @@ The DawakSahl Team
             'success': False,
             'error': 'Failed to send order confirmation email'
         }
-
-
-
