@@ -112,6 +112,9 @@ class User(BaseModel):
     def password_reset_sent_at(self, value):
         """Placeholder setter for password_reset_sent_at"""
         self._password_reset_sent_at = value
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
     
     def to_dict(self, include_sensitive=False):
         """Convert to dictionary, optionally excluding sensitive data"""
