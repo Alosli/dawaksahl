@@ -75,6 +75,7 @@ def send_email(to_email, subject, html_content, text_content=None, attachments=N
                     mail.attachment = attached_file
         
         # Send email
+        logger.info(f"Sending email from {from_email} to {to_email} with subject '{subject}'")
         response = sg.send(mail)
         
         if response.status_code in [200, 201, 202]:
