@@ -111,7 +111,7 @@ def log_audit_action(user_id, action_type, table_name=None, record_id=None, old_
     try:
         audit_log = AuditLog(
             user_id=user_id,
-            action_type=action_type,
+            action=action_type,
             table_name=table_name,
             record_id=record_id,
             old_values=old_values,
