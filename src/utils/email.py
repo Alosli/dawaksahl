@@ -44,9 +44,9 @@ def send_email(to_email, subject, html_content, text_content=None, attachments=N
         to_email_obj = To(to_email)
         
         # Create mail object with appropriate content
-        if text_content:
+        if text_content and text_content.strip():
             mail = Mail(from_email_obj, to_email_obj, subject)
-            mail.add_content(Content("text/plain", text_content))
+            mail.add_content(Content("text/plain", text_content.strip()))
             mail.add_content(Content("text/html", html_content))
         else:
             mail = Mail(
