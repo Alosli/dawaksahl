@@ -5,6 +5,7 @@ from datetime import datetime
 import ipaddress
 
 from src.models import db, User, AuditLog, UserType
+from src.models.admin import AuditAction
 
 def require_user_type(*allowed_types):
     """
