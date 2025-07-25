@@ -1,11 +1,11 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from datetime import datetime
 
 from src.models import db, Order, OrderItem, ShoppingCart, CartItem, OrderStatus, PaymentMethod, PaymentStatus
 from src.utils.auth import get_current_user, log_audit_action, require_customer, require_seller_or_admin, can_access_order
 from src.utils.validation import validate_required_fields, validate_order_status, validate_payment_method, sanitize_string
-from src.utils.email import send_order_notification_email
+from src.utils.email import send_order_confirmation_email
 
 orders_bp = Blueprint('orders', __name__)
 
@@ -18,357 +18,319 @@ def create_order():
         data = request.get_json()
         
         if not data:
-            return jsonify({'error': 'No data provided'}), 400
+            return jsonify({
+                'success': False,
+                'message': 'No data provided'
+            }), 400
         
         # Validate required fields
-        required_fields = ['delivery_address', 'payment_method']
-        validation = validate_required_fields(data, required_fields)
-        if not validation['valid']:
-            return jsonify({'error': validation['message']}), 400
-        
-        # Validate payment method
-        if not validate_payment_method(data['payment_method']):
-            return jsonify({'error': 'Invalid payment method'}), 400
+        required_fields = ['pharmacy_id', 'delivery_method', 'payment_method']
+        validation_result = validate_required_fields(data, required_fields)
+        if not validation_result['valid']:
+            return jsonify({
+                'success': False,
+                'message': validation_result['message']
+            }), 400
         
         # Get user's cart
         cart = ShoppingCart.query.filter_by(user_id=user.id).first()
         if not cart or not cart.items:
-            return jsonify({'error': 'Cart is empty'}), 400
+            return jsonify({
+                'success': False,
+                'message': 'Cart is empty'
+            }), 400
         
-        # Group cart items by pharmacy
-        pharmacy_groups = cart.get_items_by_pharmacy()
+        # Filter cart items by pharmacy
+        pharmacy_items = [item for item in cart.items if item.pharmacy_id == data['pharmacy_id']]
+        if not pharmacy_items:
+            return jsonify({
+                'success': False,
+                'message': 'No items found for this pharmacy'
+            }), 400
         
-        if not pharmacy_groups:
-            return jsonify({'error': 'No items in cart'}), 400
+        # Create order
+        order = Order(
+            customer_id=user.id,
+            pharmacy_id=data['pharmacy_id'],
+            delivery_method=data['delivery_method'],
+            payment_method=data['payment_method'],
+            delivery_address=sanitize_string(data.get('delivery_address')),
+            delivery_phone=sanitize_string(data.get('delivery_phone')),
+            delivery_notes=sanitize_string(data.get('delivery_notes')),
+            special_instructions=sanitize_string(data.get('special_instructions'))
+        )
         
-        created_orders = []
+        # Generate order number
+        order.order_number = order.generate_order_number()
         
-        # Create separate order for each pharmacy
-        for pharmacy_id, items in pharmacy_groups.items():
-            # Calculate order totals
-            subtotal = sum(item.get_total_price() for item in items)
-            delivery_fee = data.get('delivery_fee', 0.0)
-            tax_amount = data.get('tax_amount', 0.0)
-            discount_amount = data.get('discount_amount', 0.0)
-            total_amount = subtotal + delivery_fee + tax_amount - discount_amount
-            
-            # Create order
-            order = Order(
-                user_id=user.id,
-                pharmacy_id=pharmacy_id,
-                total_amount=total_amount,
-                delivery_fee=delivery_fee,
-                tax_amount=tax_amount,
-                discount_amount=discount_amount,
-                payment_method=PaymentMethod(data['payment_method']),
-                delivery_address=sanitize_string(data['delivery_address'], 500),
-                delivery_latitude=data.get('delivery_latitude'),
-                delivery_longitude=data.get('delivery_longitude'),
-                customer_notes=sanitize_string(data.get('customer_notes', ''), 500)
+        # Add order items
+        subtotal = 0
+        for cart_item in pharmacy_items:
+            order_item = OrderItem(
+                product_id=cart_item.product_id,
+                product_name=cart_item.product_name,
+                product_name_ar=cart_item.product_name_ar,
+                quantity=cart_item.quantity,
+                unit_price=cart_item.unit_price
             )
-            
-            db.session.add(order)
-            db.session.flush()  # Get order ID
-            
-            # Create order items
-            for cart_item in items:
-                # Verify product availability
-                if not cart_item.pharmacy_product.can_order_quantity(cart_item.quantity):
-                    db.session.rollback()
-                    return jsonify({
-                        'error': f'Product {cart_item.pharmacy_product.product.product_name} is no longer available in requested quantity'
-                    }), 400
-                
-                order_item = OrderItem(
-                    order_id=order.id,
-                    pharmacy_product_id=cart_item.pharmacy_product_id,
-                    product_name=cart_item.pharmacy_product.product.product_name,
-                    quantity=cart_item.quantity,
-                    unit_price=cart_item.pharmacy_product.price,
-                    total_price=cart_item.get_total_price()
-                )
-                
-                db.session.add(order_item)
-                
-                # Update product quantity
-                cart_item.pharmacy_product.quantity_available -= cart_item.quantity
-            
-            created_orders.append(order)
+            order_item.calculate_total()
+            order.items.append(order_item)
+            subtotal += order_item.total_price
         
-        # Clear cart after successful order creation
-        CartItem.query.filter_by(cart_id=cart.id).delete()
+        # Calculate totals
+        order.subtotal = subtotal
+        order.delivery_fee = data.get('delivery_fee', 0)
+        order.tax_amount = data.get('tax_amount', 0)
+        order.discount_amount = data.get('discount_amount', 0)
+        order.calculate_totals()
         
+        # Save order
+        db.session.add(order)
         db.session.commit()
         
-        # Send notification emails
-        for order in created_orders:
-            try:
-                send_order_notification_email(user.email, order, user.preferred_language)
-            except Exception as e:
-                current_app.logger.error(f"Failed to send order notification: {str(e)}")
+        # Remove items from cart
+        for cart_item in pharmacy_items:
+            db.session.delete(cart_item)
+        cart.calculate_totals()
+        db.session.commit()
         
-        # Log audit actions
-        for order in created_orders:
-            log_audit_action(user.id, 'order_created', 'orders', order.id, {}, order.to_dict())
+        # Send order confirmation email
+        try:
+            email_result = send_order_confirmation_email(
+                user.email,
+                user.get_full_name(),
+                order.to_dict(),
+                user.preferred_language
+            )
+            if not email_result['success']:
+                # Log email failure but don't fail the order
+                print(f"Failed to send order confirmation email: {email_result.get('error')}")
+        except Exception as e:
+            print(f"Error sending order confirmation email: {str(e)}")
         
-        # Format response
-        orders_data = []
-        for order in created_orders:
-            order_data = order.to_dict()
-            order_data['items'] = [item.to_dict() for item in order.items]
-            orders_data.append(order_data)
+        # Log audit action
+        log_audit_action(
+            user.id,
+            'create',
+            'order',
+            order.id,
+            f"Created order {order.order_number}"
+        )
         
         return jsonify({
-            'message': f'{len(created_orders)} order(s) created successfully',
-            'orders': orders_data
+            'success': True,
+            'message': 'Order created successfully',
+            'order': order.to_dict()
         }), 201
         
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Create order error: {str(e)}")
-        return jsonify({'error': 'Failed to create order'}), 500
+        return jsonify({
+            'success': False,
+            'message': f'Error creating order: {str(e)}'
+        }), 500
 
 @orders_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_orders():
-    """Get user's orders (customers) or pharmacy orders (sellers)"""
+    """Get user's orders"""
     try:
         user = get_current_user()
-        
-        # Get query parameters
         page = request.args.get('page', 1, type=int)
-        per_page = min(request.args.get('per_page', 20, type=int), 100)
+        per_page = min(request.args.get('per_page', 10, type=int), 100)
         status = request.args.get('status')
         
         # Build query based on user type
         if user.user_type.value == 'customer':
-            query = Order.query.filter_by(user_id=user.id)
+            query = Order.query.filter_by(customer_id=user.id)
         elif user.user_type.value == 'seller':
-            if not user.pharmacy:
-                return jsonify({'error': 'Pharmacy not found'}), 404
-            query = Order.query.filter_by(pharmacy_id=user.pharmacy.id)
-        elif user.user_type.value == 'admin':
+            # Get orders for seller's pharmacy
+            from src.models import Pharmacy
+            pharmacy = Pharmacy.query.filter_by(seller_id=user.id).first()
+            if not pharmacy:
+                return jsonify({
+                    'success': False,
+                    'message': 'No pharmacy found for this seller'
+                }), 404
+            query = Order.query.filter_by(pharmacy_id=pharmacy.id)
+        else:  # admin
             query = Order.query
-        else:
-            return jsonify({'error': 'Unauthorized'}), 403
         
-        # Filter by status
-        if status and validate_order_status(status):
-            query = query.filter_by(order_status=OrderStatus(status))
+        # Filter by status if provided
+        if status:
+            try:
+                status_enum = OrderStatus(status)
+                query = query.filter_by(status=status_enum)
+            except ValueError:
+                return jsonify({
+                    'success': False,
+                    'message': 'Invalid order status'
+                }), 400
         
-        # Order by creation date (newest first)
-        query = query.order_by(Order.created_at.desc())
-        
-        # Paginate
-        pagination = query.paginate(
+        # Paginate results
+        orders = query.order_by(Order.created_at.desc()).paginate(
             page=page, per_page=per_page, error_out=False
         )
         
-        # Format results
-        orders = []
-        for order in pagination.items:
-            order_data = order.to_dict()
-            order_data['items'] = [item.to_dict() for item in order.items]
-            
-            # Include customer info for sellers/admins
-            if user.user_type.value in ['seller', 'admin']:
-                order_data['customer'] = {
-                    'id': order.customer.id,
-                    'full_name': order.customer.get_full_name(),
-                    'email': order.customer.email,
-                    'phone_number': order.customer.phone_number
-                }
-            
-            # Include pharmacy info for customers/admins
-            if user.user_type.value in ['customer', 'admin']:
-                order_data['pharmacy'] = {
-                    'id': order.pharmacy.id,
-                    'pharmacy_name': order.pharmacy.pharmacy_name,
-                    'pharmacy_name_ar': order.pharmacy.pharmacy_name_ar,
-                    'district': order.pharmacy.district,
-                    'phone_number': order.pharmacy.phone_number
-                }
-            
-            orders.append(order_data)
-        
         return jsonify({
-            'orders': orders,
+            'success': True,
+            'orders': [order.to_dict() for order in orders.items],
             'pagination': {
-                'page': pagination.page,
-                'pages': pagination.pages,
-                'per_page': pagination.per_page,
-                'total': pagination.total,
-                'has_next': pagination.has_next,
-                'has_prev': pagination.has_prev
+                'page': page,
+                'pages': orders.pages,
+                'per_page': per_page,
+                'total': orders.total
             }
-        }), 200
+        })
         
     except Exception as e:
-        current_app.logger.error(f"Get orders error: {str(e)}")
-        return jsonify({'error': 'Failed to get orders'}), 500
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching orders: {str(e)}'
+        }), 500
 
-@orders_bp.route('/<order_id>', methods=['GET'])
+@orders_bp.route('/<int:order_id>', methods=['GET'])
 @jwt_required()
 def get_order(order_id):
     """Get specific order details"""
     try:
         user = get_current_user()
-        order = Order.query.get(order_id)
-        
-        if not order:
-            return jsonify({'error': 'Order not found'}), 404
+        order = Order.query.get_or_404(order_id)
         
         # Check access permissions
         if not can_access_order(user, order):
-            return jsonify({'error': 'Access denied'}), 403
-        
-        # Format order data
-        order_data = order.to_dict()
-        order_data['items'] = [item.to_dict() for item in order.items]
-        
-        # Include customer info for sellers/admins
-        if user.user_type.value in ['seller', 'admin']:
-            order_data['customer'] = {
-                'id': order.customer.id,
-                'full_name': order.customer.get_full_name(),
-                'email': order.customer.email,
-                'phone_number': order.customer.phone_number
-            }
-        
-        # Include pharmacy info for customers/admins
-        if user.user_type.value in ['customer', 'admin']:
-            order_data['pharmacy'] = {
-                'id': order.pharmacy.id,
-                'pharmacy_name': order.pharmacy.pharmacy_name,
-                'pharmacy_name_ar': order.pharmacy.pharmacy_name_ar,
-                'district': order.pharmacy.district,
-                'phone_number': order.pharmacy.phone_number,
-                'detailed_address': order.pharmacy.detailed_address
-            }
+            return jsonify({
+                'success': False,
+                'message': 'Access denied'
+            }), 403
         
         return jsonify({
-            'order': order_data
-        }), 200
+            'success': True,
+            'order': order.to_dict()
+        })
         
     except Exception as e:
-        current_app.logger.error(f"Get order error: {str(e)}")
-        return jsonify({'error': 'Failed to get order'}), 500
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching order: {str(e)}'
+        }), 500
 
-@orders_bp.route('/<order_id>/status', methods=['PUT'])
+@orders_bp.route('/<int:order_id>/status', methods=['PUT'])
 @require_seller_or_admin
 def update_order_status(order_id):
-    """Update order status (sellers and admins only)"""
+    """Update order status"""
     try:
         user = get_current_user()
+        order = Order.query.get_or_404(order_id)
         data = request.get_json()
         
         if not data or 'status' not in data:
-            return jsonify({'error': 'Status is required'}), 400
+            return jsonify({
+                'success': False,
+                'message': 'Status is required'
+            }), 400
         
         # Validate status
-        if not validate_order_status(data['status']):
-            return jsonify({'error': 'Invalid order status'}), 400
+        try:
+            new_status = OrderStatus(data['status'])
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid order status'
+            }), 400
         
-        new_status = OrderStatus(data['status'])
-        
-        # Get order
-        order = Order.query.get(order_id)
-        if not order:
-            return jsonify({'error': 'Order not found'}), 404
-        
-        # Check access permissions
-        if not can_access_order(user, order):
-            return jsonify({'error': 'Access denied'}), 403
-        
-        # Check if status transition is valid
-        if not order.can_update_status(new_status):
-            return jsonify({'error': f'Cannot change status from {order.order_status.value} to {new_status.value}'}), 400
-        
-        # Store old values for audit
-        old_values = {'order_status': order.order_status.value}
+        # Check permissions for sellers
+        if user.user_type.value == 'seller':
+            from src.models import Pharmacy
+            pharmacy = Pharmacy.query.filter_by(seller_id=user.id).first()
+            if not pharmacy or order.pharmacy_id != pharmacy.id:
+                return jsonify({
+                    'success': False,
+                    'message': 'Access denied'
+                }), 403
         
         # Update status
-        order.order_status = new_status
+        old_status = order.status
+        order.status = new_status
         
-        # Update delivery time if delivered
+        # Update timestamps based on status
         if new_status == OrderStatus.DELIVERED:
-            order.actual_delivery_time = datetime.utcnow()
-        
-        # Add pharmacy notes if provided
-        if data.get('notes'):
-            order.pharmacy_notes = sanitize_string(data['notes'], 500)
+            order.delivered_at = datetime.utcnow()
         
         db.session.commit()
         
         # Log audit action
-        log_audit_action(user.id, 'order_status_updated', 'orders', order.id, old_values, {
-            'order_status': new_status.value,
-            'pharmacy_notes': order.pharmacy_notes
-        })
+        log_audit_action(
+            user.id,
+            'update',
+            'order',
+            order.id,
+            f"Updated order status from {old_status.value} to {new_status.value}"
+        )
         
         return jsonify({
+            'success': True,
             'message': 'Order status updated successfully',
             'order': order.to_dict()
-        }), 200
+        })
         
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Update order status error: {str(e)}")
-        return jsonify({'error': 'Failed to update order status'}), 500
+        return jsonify({
+            'success': False,
+            'message': f'Error updating order status: {str(e)}'
+        }), 500
 
-@orders_bp.route('/<order_id>/cancel', methods=['POST'])
+@orders_bp.route('/<int:order_id>/cancel', methods=['POST'])
 @jwt_required()
 def cancel_order(order_id):
-    """Cancel order (customers and sellers)"""
+    """Cancel an order"""
     try:
         user = get_current_user()
+        order = Order.query.get_or_404(order_id)
         data = request.get_json() or {}
-        
-        # Get order
-        order = Order.query.get(order_id)
-        if not order:
-            return jsonify({'error': 'Order not found'}), 404
         
         # Check access permissions
         if not can_access_order(user, order):
-            return jsonify({'error': 'Access denied'}), 403
+            return jsonify({
+                'success': False,
+                'message': 'Access denied'
+            }), 403
         
         # Check if order can be cancelled
-        if not order.can_cancel():
-            return jsonify({'error': f'Cannot cancel order with status {order.order_status.value}'}), 400
+        if not order.can_be_cancelled():
+            return jsonify({
+                'success': False,
+                'message': 'Order cannot be cancelled at this stage'
+            }), 400
         
-        # Store old values for audit
-        old_values = {'order_status': order.order_status.value}
+        # Update order status
+        order.status = OrderStatus.CANCELLED
+        order.cancellation_reason = sanitize_string(data.get('reason', 'Cancelled by user'))
         
-        # Cancel order
-        order.order_status = OrderStatus.CANCELLED
-        
-        # Add cancellation reason
-        cancellation_reason = sanitize_string(data.get('reason', ''), 500)
-        if user.user_type.value == 'customer':
-            order.customer_notes = f"Cancelled by customer: {cancellation_reason}" if cancellation_reason else "Cancelled by customer"
-        else:
-            order.pharmacy_notes = f"Cancelled by pharmacy: {cancellation_reason}" if cancellation_reason else "Cancelled by pharmacy"
-        
-        # Restore product quantities
-        for item in order.items:
-            item.pharmacy_product.quantity_available += item.quantity
+        # Restore inventory (if needed)
+        # This would be implemented based on your inventory management system
         
         db.session.commit()
         
         # Log audit action
-        log_audit_action(user.id, 'order_cancelled', 'orders', order.id, old_values, {
-            'order_status': OrderStatus.CANCELLED.value,
-            'cancellation_reason': cancellation_reason
-        })
+        log_audit_action(
+            user.id,
+            'update',
+            'order',
+            order.id,
+            f"Cancelled order {order.order_number}"
+        )
         
         return jsonify({
+            'success': True,
             'message': 'Order cancelled successfully',
             'order': order.to_dict()
-        }), 200
+        })
         
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Cancel order error: {str(e)}")
-        return jsonify({'error': 'Failed to cancel order'}), 500
-
+        return jsonify({
+            'success': False,
+            'message': f'Error cancelling order: {str(e)}'
+        }), 500
