@@ -43,13 +43,19 @@ def send_email(to_email, subject, html_content, text_content=None, attachments=N
         from_email_obj = Email(from_email, from_name)
         to_email_obj = To(to_email)
         
-        # Create mail object
-        mail = Mail(
-            from_email=from_email_obj,
-            to_emails=to_email_obj,
-            subject=subject,
-            html_content=html_content
-        )
+        # Create mail object with appropriate content
+        if text_content:
+            mail = Mail(from_email_obj, to_email_obj, subject)
+            mail.add_content(Content("text/plain", text_content))
+            mail.add_content(Content("text/html", html_content))
+        else:
+            mail = Mail(
+                from_email=from_email_obj,
+                to_emails=to_email_obj,
+                subject=subject,
+                html_content=html_content
+            )
+       
         
         # Add plain text content if provided
         if text_content:
