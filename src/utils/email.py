@@ -39,34 +39,29 @@ def send_email(to_email, subject, html_content, text_content=None, attachments=N
         # Create SendGrid client
         sg = SendGridAPIClient(api_key=sendgrid_api_key)
         
-        # Create email message
+        # Create email objects
         from_email_obj = Email(from_email, from_name)
         to_email_obj = To(to_email)
         
-        # Create mail object with appropriate content
-        if text_content and text_content.strip():
-            mail = Mail(
-                from_email=from_email_obj,
-                to_emails=to_email_obj,
-                subject=subject,
-            )
-            mail.add_content(Content("text/plain", text_content.strip()))
-            mail.add_content(Content("text/html", html_content))
-        else:
-            mail = Mail(
-                from_email=from_email_obj,
-                to_emails=to_email_obj,
-                subject=subject,
-                html_content=html_content
-            )
-       
+        # Create content list
+        content_list = []
         
         # Add plain text content if provided
         if text_content:
-            mail.content = [
-                Content("text/plain", text_content),
-                Content("text/html", html_content)
-            ]
+            content_list.append(Content("text/plain", text_content))
+        
+        # Add HTML content
+        content_list.append(Content("text/html", html_content))
+        
+        # Create mail object with content
+        mail = Mail(
+            from_email=from_email_obj,
+            to_emails=to_email_obj,
+            subject=subject
+        )
+        
+        # Set content properly
+        mail.content = content_list
         
         # Add attachments if any
         if attachments:
@@ -85,7 +80,6 @@ def send_email(to_email, subject, html_content, text_content=None, attachments=N
                     mail.attachment = attached_file
         
         # Send email
-        logger.info(f"Sending email from {from_email} to {to_email} with subject '{subject}'")
         response = sg.send(mail)
         
         if response.status_code in [200, 201, 202]:
@@ -103,10 +97,7 @@ def send_email(to_email, subject, html_content, text_content=None, attachments=N
             }
         
     except Exception as e:
-        if hasattr(e, 'body'):
-            logger.error(f"SendGrid error response: {e.body.decode()}")
-        else:
-            logger.error(f"Unexpected error sending email via SendGrid: {str(e)}")
+        logger.error(f"Unexpected error sending email via SendGrid: {str(e)}")
         return {
             'success': False,
             'error': 'Failed to send email. Please try again later.'
@@ -132,6 +123,21 @@ def send_verification_email(user_email, user_name, verification_token, language=
         
         if language == 'ar':
             subject = "تأكيد البريد الإلكتروني - دواك سهل"
+            
+            # Plain text version for Arabic
+            text_content = f"""
+مرحباً {user_name}!
+
+شكراً لك على التسجيل في دواك سهل. لتأكيد بريدك الإلكتروني، يرجى زيارة الرابط التالي:
+
+{verification_url}
+
+هذا الرابط صالح لمدة 24 ساعة فقط.
+
+مع أطيب التحيات،
+فريق دواك سهل
+            """
+            
             html_template = """
             <!DOCTYPE html>
             <html dir="rtl" lang="ar">
@@ -181,11 +187,6 @@ def send_verification_email(user_email, user_name, verification_token, language=
                         font-weight: bold; 
                         margin: 20px 0;
                         box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
-                        transition: transform 0.2s;
-                    }
-                    .button:hover {
-                        transform: translateY(-2px);
-                        box-shadow: 0 6px 8px rgba(37, 99, 235, 0.4);
                     }
                     .footer { 
                         background-color: #f8f9fa; 
@@ -236,13 +237,6 @@ def send_verification_email(user_email, user_name, verification_token, language=
                             <strong>⏰ ملاحظة مهمة:</strong> هذا الرابط صالح لمدة 24 ساعة فقط. إذا لم تقم بتأكيد بريدك الإلكتروني خلال هذه المدة، ستحتاج إلى طلب رابط تأكيد جديد من صفحة تسجيل الدخول.
                         </div>
                         
-                        <p><strong>لماذا نطلب تأكيد البريد الإلكتروني؟</strong></p>
-                        <ul>
-                            <li>لضمان أمان حسابك</li>
-                            <li>لإرسال تحديثات الطلبات</li>
-                            <li>لاستعادة كلمة المرور عند الحاجة</li>
-                        </ul>
-                        
                         <p>إذا لم تقم بإنشاء حساب في دواك سهل، يرجى تجاهل هذه الرسالة أو التواصل معنا.</p>
                         
                         <p style="margin-top: 30px;">مع أطيب التحيات،<br><strong>فريق دواك سهل</strong></p>
@@ -256,20 +250,23 @@ def send_verification_email(user_email, user_name, verification_token, language=
             </body>
             </html>
             """
-            text_content = f"""
-            مرحباً {user_name}!
-            
-            شكراً لك على التسجيل في دواك سهل. لتأكيد بريدك الإلكتروني، يرجى زيارة الرابط التالي:
-            
-            {verification_url}
-            
-            هذا الرابط صالح لمدة 24 ساعة فقط.
-            
-            مع أطيب التحيات،
-            فريق دواك سهل
-            """
         else:
             subject = "Email Verification - DawakSahl"
+            
+            # Plain text version for English
+            text_content = f"""
+Welcome {user_name}!
+
+Thank you for registering with DawakSahl. To verify your email address, please visit:
+
+{verification_url}
+
+This link is valid for 24 hours only.
+
+Best regards,
+The DawakSahl Team
+            """
+            
             html_template = """
             <!DOCTYPE html>
             <html lang="en">
@@ -318,11 +315,6 @@ def send_verification_email(user_email, user_name, verification_token, language=
                         font-weight: bold; 
                         margin: 20px 0;
                         box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
-                        transition: transform 0.2s;
-                    }
-                    .button:hover {
-                        transform: translateY(-2px);
-                        box-shadow: 0 6px 8px rgba(37, 99, 235, 0.4);
                     }
                     .footer { 
                         background-color: #f8f9fa; 
@@ -373,13 +365,6 @@ def send_verification_email(user_email, user_name, verification_token, language=
                             <strong>⏰ Important:</strong> This verification link is valid for 24 hours only. If you don't verify your email within this time, you'll need to request a new verification link from the login page.
                         </div>
                         
-                        <p><strong>Why do we ask for email verification?</strong></p>
-                        <ul>
-                            <li>To ensure the security of your account</li>
-                            <li>To send you order updates and notifications</li>
-                            <li>To help you recover your password if needed</li>
-                        </ul>
-                        
                         <p>If you didn't create an account with DawakSahl, please ignore this email or contact us.</p>
                         
                         <p style="margin-top: 30px;">Best regards,<br><strong>The DawakSahl Team</strong></p>
@@ -392,18 +377,6 @@ def send_verification_email(user_email, user_name, verification_token, language=
                 </div>
             </body>
             </html>
-            """
-            text_content = f"""
-            Welcome {user_name}!
-            
-            Thank you for registering with DawakSahl. To verify your email address, please visit:
-            
-            {verification_url}
-            
-            This link is valid for 24 hours only.
-            
-            Best regards,
-            The DawakSahl Team
             """
         
         # Render template with variables
@@ -439,30 +412,74 @@ def send_password_reset_email(user_email, user_name, reset_token, language='en')
         
         if language == 'ar':
             subject = "إعادة تعيين كلمة المرور - دواك سهل"
+            text_content = f"""
+مرحباً {user_name}،
+
+لقد طلبت إعادة تعيين كلمة المرور. لإعادة تعيين كلمة المرور، يرجى زيارة الرابط التالي:
+
+{reset_url}
+
+هذا الرابط ينتهي خلال ساعة واحدة.
+
+إذا لم تطلب هذا، يرجى تجاهل هذه الرسالة.
+
+مع أطيب التحيات،
+فريق دواك سهل
+            """
             html_content = f"""
-            <div style="font-family: Arial, sans-serif; direction: rtl;">
-                <h2>طلب إعادة تعيين كلمة المرور</h2>
-                <p>مرحباً {user_name}،</p>
-                <p>لقد طلبت إعادة تعيين كلمة المرور. انقر على الرابط أدناه لإعادة تعيين كلمة المرور:</p>
-                <p><a href="{reset_url}" style="background: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">إعادة تعيين كلمة المرور</a></p>
-                <p>هذا الرابط ينتهي خلال ساعة واحدة.</p>
-                <p>إذا لم تطلب هذا، يرجى تجاهل هذه الرسالة.</p>
+            <div style="font-family: Arial, sans-serif; direction: rtl; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                    <h1 style="margin: 0; font-size: 28px;">دواك سهل</h1>
+                    <p style="margin: 10px 0 0 0; opacity: 0.9;">صيدليتك في تعز</p>
+                </div>
+                <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <h2 style="color: #2563eb;">طلب إعادة تعيين كلمة المرور</h2>
+                    <p>مرحباً {user_name}،</p>
+                    <p>لقد طلبت إعادة تعيين كلمة المرور. انقر على الزر أدناه لإعادة تعيين كلمة المرور:</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="{reset_url}" style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">إعادة تعيين كلمة المرور</a>
+                    </div>
+                    <p style="background: #fff3cd; padding: 15px; border-radius: 8px; color: #856404;"><strong>هام:</strong> هذا الرابط ينتهي خلال ساعة واحدة.</p>
+                    <p>إذا لم تطلب هذا، يرجى تجاهل هذه الرسالة.</p>
+                </div>
             </div>
             """
         else:
             subject = "Password Reset - DawakSahl"
+            text_content = f"""
+Hello {user_name},
+
+You requested a password reset. To reset your password, please visit:
+
+{reset_url}
+
+This link expires in 1 hour.
+
+If you didn't request this, please ignore this email.
+
+Best regards,
+The DawakSahl Team
+            """
             html_content = f"""
-            <div style="font-family: Arial, sans-serif;">
-                <h2>Password Reset Request</h2>
-                <p>Hello {user_name},</p>
-                <p>You requested a password reset. Click the link below to reset your password:</p>
-                <p><a href="{reset_url}" style="background: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
-                <p>This link expires in 1 hour.</p>
-                <p>If you didn't request this, please ignore this email.</p>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                    <h1 style="margin: 0; font-size: 28px;">DawakSahl</h1>
+                    <p style="margin: 10px 0 0 0; opacity: 0.9;">Your Pharmacy in Taiz</p>
+                </div>
+                <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <h2 style="color: #2563eb;">Password Reset Request</h2>
+                    <p>Hello {user_name},</p>
+                    <p>You requested a password reset. Click the button below to reset your password:</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="{reset_url}" style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Reset Password</a>
+                    </div>
+                    <p style="background: #fff3cd; padding: 15px; border-radius: 8px; color: #856404;"><strong>Important:</strong> This link expires in 1 hour.</p>
+                    <p>If you didn't request this, please ignore this email.</p>
+                </div>
             </div>
             """
         
-        return send_email(user_email, subject, html_content)
+        return send_email(user_email, subject, html_content, text_content)
         
     except Exception as e:
         logger.error(f"Error sending password reset email: {str(e)}")
@@ -485,32 +502,77 @@ def send_order_confirmation_email(user_email, user_name, order_data, language='e
         dict: Result with success status and message
     """
     try:
+        order_number = order_data.get('order_number', 'N/A')
+        total_amount = order_data.get('total_amount', 0)
+        
         if language == 'ar':
-            subject = f"تأكيد الطلب #{order_data.get('order_number')} - دواك سهل"
+            subject = f"تأكيد الطلب #{order_number} - دواك سهل"
+            text_content = f"""
+مرحباً {user_name}،
+
+تم تأكيد طلبك #{order_number}.
+المجموع: {total_amount} ريال يمني
+
+سنقوم بإشعارك عندما يصبح طلبك جاهزاً.
+
+شكراً لاختيارك دواك سهل!
+
+مع أطيب التحيات،
+فريق دواك سهل
+            """
             html_content = f"""
-            <div style="font-family: Arial, sans-serif; direction: rtl;">
-                <h2>تأكيد الطلب</h2>
-                <p>مرحباً {user_name}،</p>
-                <p>تم تأكيد طلبك #{order_data.get('order_number')}.</p>
-                <p>المجموع: {order_data.get('total_amount')} ريال يمني</p>
-                <p>سنقوم بإشعارك عندما يصبح طلبك جاهزاً.</p>
-                <p>شكراً لاختيارك دواك سهل!</p>
+            <div style="font-family: Arial, sans-serif; direction: rtl; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                    <h1 style="margin: 0; font-size: 28px;">دواك سهل</h1>
+                    <p style="margin: 10px 0 0 0; opacity: 0.9;">صيدليتك في تعز</p>
+                </div>
+                <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <h2 style="color: #2563eb;">تأكيد الطلب</h2>
+                    <p>مرحباً {user_name}،</p>
+                    <p>تم تأكيد طلبك <strong>#{order_number}</strong> بنجاح.</p>
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <p style="margin: 0;"><strong>المجموع: {total_amount} ريال يمني</strong></p>
+                    </div>
+                    <p>سنقوم بإشعارك عندما يصبح طلبك جاهزاً للاستلام أو التوصيل.</p>
+                    <p>شكراً لاختيارك دواك سهل!</p>
+                </div>
             </div>
             """
         else:
-            subject = f"Order Confirmation #{order_data.get('order_number')} - DawakSahl"
+            subject = f"Order Confirmation #{order_number} - DawakSahl"
+            text_content = f"""
+Hello {user_name},
+
+Your order #{order_number} has been confirmed.
+Total: {total_amount} YER
+
+We'll notify you when your order is ready.
+
+Thank you for choosing DawakSahl!
+
+Best regards,
+The DawakSahl Team
+            """
             html_content = f"""
-            <div style="font-family: Arial, sans-serif;">
-                <h2>Order Confirmation</h2>
-                <p>Hello {user_name},</p>
-                <p>Your order #{order_data.get('order_number')} has been confirmed.</p>
-                <p>Total: {order_data.get('total_amount')} YER</p>
-                <p>We'll notify you when your order is ready.</p>
-                <p>Thank you for choosing DawakSahl!</p>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                    <h1 style="margin: 0; font-size: 28px;">DawakSahl</h1>
+                    <p style="margin: 10px 0 0 0; opacity: 0.9;">Your Pharmacy in Taiz</p>
+                </div>
+                <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <h2 style="color: #2563eb;">Order Confirmation</h2>
+                    <p>Hello {user_name},</p>
+                    <p>Your order <strong>#{order_number}</strong> has been confirmed successfully.</p>
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <p style="margin: 0;"><strong>Total: {total_amount} YER</strong></p>
+                    </div>
+                    <p>We'll notify you when your order is ready for pickup or delivery.</p>
+                    <p>Thank you for choosing DawakSahl!</p>
+                </div>
             </div>
             """
         
-        return send_email(user_email, subject, html_content)
+        return send_email(user_email, subject, html_content, text_content)
         
     except Exception as e:
         logger.error(f"Error sending order confirmation email: {str(e)}")
@@ -518,3 +580,6 @@ def send_order_confirmation_email(user_email, user_name, order_data, language='e
             'success': False,
             'error': 'Failed to send order confirmation email'
         }
+
+
+
