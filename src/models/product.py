@@ -172,3 +172,28 @@ class ProductCategory(BaseModel):
     
     def __repr__(self):
         return f'<ProductCategory {self.name}>'
+        
+class PharmacyProduct(BaseModel):
+    __tablename__ = 'pharmacy_products'
+
+    pharmacy_id        = db.Column(db.Integer, db.ForeignKey('pharmacies.id'), nullable=False)
+    product_id         = db.Column(db.Integer, db.ForeignKey('products.id'),   nullable=False)
+    price              = db.Column(db.Numeric(10, 2), nullable=False)
+    quantity_available = db.Column(db.Integer,         nullable=False)
+    minimum_quantity   = db.Column(db.Integer,         nullable=True)
+    maximum_quantity   = db.Column(db.Integer,         nullable=True)
+    custom_image_url   = db.Column(db.String(500),     nullable=True)
+    pharmacy_notes     = db.Column(db.Text,            nullable=True)
+    pharmacy_notes_ar  = db.Column(db.Text,            nullable=True)
+    is_available       = db.Column(db.Boolean, default=True, nullable=False)
+
+    product  = db.relationship('Product', backref='pharmacy_products')
+
+    def to_dict(self):
+        data       = super().to_dict()
+        data['price'] = float(data['price']) if data['price'] else 0.0
+        return data
+
+    def __repr__(self):
+        return f'<PharmacyProduct {self.pharmacy_id}-{self.product_id}>'
+
