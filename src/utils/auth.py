@@ -96,7 +96,7 @@ def get_user_agent():
     """Get user agent from request"""
     return request.headers.get('User-Agent', '')
 
-def log_audit_action(user_id, action_type, table_name=None, record_id=None, old_values=None, new_values=None):
+def log_audit_action(user_id, action_type, target_type=None, target_id=None, description='', old_values=None, new_values=None):
     """
     Log audit action to database
     
@@ -112,7 +112,9 @@ def log_audit_action(user_id, action_type, table_name=None, record_id=None, old_
         audit_log = AuditLog(
             user_id=user_id,
             action=action_type,
-            table_name=table_name,
+            target_type=target_type,
+            target_id=target_id,
+            description=description,
             record_id=record_id,
             old_values=old_values,
             new_values=new_values,
