@@ -117,7 +117,8 @@ def register():
         
         # Send verification email
         try:
-            send_verification_email(user.email, user.verification_token, user.preferred_language)
+            send_verification_email(user.email, user.full_name, user.verification_token, user.preferred_language)
+
         except Exception as e:
             current_app.logger.error(f"Failed to send verification email: {str(e)}")
         
