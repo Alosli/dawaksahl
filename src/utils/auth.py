@@ -111,7 +111,7 @@ def log_audit_action(user_id, action_type, target_type=None, target_id=None, des
     try:
         audit_log = AuditLog(
             user_id=user_id,
-            action=action_type,
+            action=AuditAction.LOGIN,
             target_type=target_type,
             target_id=target_id,
             description=description,
