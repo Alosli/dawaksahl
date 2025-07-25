@@ -92,7 +92,10 @@ def send_email(to_email, subject, html_content, text_content=None, attachments=N
             }
         
     except Exception as e:
-        logger.error(f"Unexpected error sending email via SendGrid: {str(e)}")
+        if hasattr(e, 'body'):
+            logger.error(f"SendGrid error response: {e.body.decode()}")
+        else:
+            logger.error(f"Unexpected error sending email via SendGrid: {str(e)}")
         return {
             'success': False,
             'error': 'Failed to send email. Please try again later.'
