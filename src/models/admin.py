@@ -1,4 +1,5 @@
 from .database import db, BaseModel
+from sqlalchemy.dialects.postgresql import JSON
 from datetime import datetime
 import enum
 
@@ -107,9 +108,9 @@ class AuditLog(BaseModel):
     target_id = db.Column(db.String(50), nullable=True)  # ID of the affected object
     
     # Details
-    description = db.Column(db.Text, nullable=False)
-    old_values = db.Column(db.Text, nullable=True)  # JSON string of old values
-    new_values = db.Column(db.Text, nullable=True)  # JSON string of new values
+    description = db.Column(JSON, nullable=True)
+    old_values = db.Column(JSON, nullable=True)
+    new_values = db.Column(JSON, nullable=True)
     
     # Request Information
     ip_address = db.Column(db.String(45), nullable=True)  # IPv4 or IPv6
