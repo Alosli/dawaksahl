@@ -334,6 +334,7 @@ def login():
         import traceback
         traceback.print_exc()
         current_app.logger.error(f"Login error: {str(e)}")
+        print("Login request data:", data)
         return jsonify({
             'success': False,
             'message': 'Login failed'
