@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 
-from src.models import db, Product, ProductCategory, PharmacyProduct
+from src.models import db, Product, ProductCategory
 from src.utils.auth import get_current_user, log_audit_action, require_admin
 from src.utils.validation import validate_required_fields, sanitize_string
 
