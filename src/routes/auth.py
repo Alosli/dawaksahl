@@ -2,14 +2,11 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
 import secrets
-import re
+
 from src.models import db, User, UserAddress, Pharmacy, UserType
 from src.utils.validation import validate_email, validate_password, validate_phone
 from src.utils.auth import log_audit_action
 from src.utils.email import send_verification_email, send_password_reset_email
-
-# Email validation regex
-EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -34,13 +31,10 @@ def register():
                     'message': f'{field} is required'
                 }), 400
         
-        
-                
-        if not EMAIL_REGEX.match(data['email']):
-            return jsonify({
-                'success': False,
-                'message': 'Invalid email format'
-            }), 400
+        # Validate email
+        email_validation = validate_email(data['email'])
+        if not validate_email(data['email']):  # ✅ Direct boolean check
+            return jsonify({'success': False, 'message': 'Invalid email format'}), 400
         
         # Check if email already exists
         existing_user = User.query.filter_by(email=data['email']).first()
@@ -61,11 +55,8 @@ def register():
         # Validate phone if provided
         if 'phone_number' in data and data['phone_number']:
             phone_validation = validate_phone(data['phone_number'])
-            if not phone_validation['valid']:
-                return jsonify({
-                    'success': False,
-                    'message': phone_validation['message']
-                }), 400
+            if not validate_phone(data['phone_number']):
+                return jsonify({'success': False, 'message': 'Invalid phone number format'}), 400
             
             # Check if phone already exists
             existing_phone = User.query.filter_by(phone_number=data['phone_number']).first()
