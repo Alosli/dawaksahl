@@ -8,6 +8,9 @@ from src.utils.validation import validate_email, validate_password, validate_pho
 from src.utils.auth import log_audit_action
 from src.utils.email import send_verification_email, send_password_reset_email
 
+# Email validation regex
+EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['POST'])
@@ -31,12 +34,12 @@ def register():
                     'message': f'{field} is required'
                 }), 400
         
-        # Validate email
-        email_validation = validate_email(data['email'])
-        if not email_validation['valid']:
+        
+                
+        if not EMAIL_REGEX.match(data['email']):
             return jsonify({
                 'success': False,
-                'message': email_validation['message']
+                'message': 'Invalid email format'
             }), 400
         
         # Check if email already exists
