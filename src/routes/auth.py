@@ -331,7 +331,9 @@ def login():
         }), 200
         
     except Exception as e:
-        print(f"Login error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        current_app.logger.error(f"Login error: {str(e)}")
         return jsonify({
             'success': False,
             'message': 'Login failed'
