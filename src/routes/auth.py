@@ -141,7 +141,7 @@ def register():
         db.session.commit()
         
         # Debug logging before sending email
-        user_full_name = user.get_full_name()
+        user_full_name = user.get_full_name
         verification_token = user.email_verification_token
         print(f"DEBUG: About to send email to {user.email}")
         print(f"DEBUG: User full name: '{user_full_name}'")
