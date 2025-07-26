@@ -516,3 +516,103 @@ def reset_password():
             'success': False,
             'message': 'Password reset failed'
         }), 500
+
+@auth_bp.route('/resend-verification', methods=['POST'])
+def resend_verification():
+    """Resend email verification"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'email' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Email is required'
+            }), 400
+        
+        # Validate email format
+        if not validate_email(data['email']):
+            return jsonify({
+                'success': False,
+                'message': 'Invalid email format'
+            }), 400
+        
+        # Find user by email
+        user = User.query.filter_by(email=data['email']).first()
+        if not user:
+            # Don't reveal if email exists or not for security
+            return jsonify({
+                'success': True,
+                'message': 'If the email exists and is not verified, a verification email will be sent'
+            }), 200
+        
+        # Check if user is already verified
+        if user.is_verified:
+            return jsonify({
+                'success': False,
+                'message': 'Email is already verified'
+            }), 400
+        
+        # Generate new verification token
+        user.generate_verification_token()
+        db.session.commit()
+        
+        # Debug logging before sending email
+        user_full_name = user.get_full_name()
+        verification_token = user.verification_token
+        print(f"DEBUG: About to resend email to {user.email}")
+        print(f"DEBUG: User full name: '{user_full_name}'")
+        print(f"DEBUG: Verification token: '{verification_token}'")
+        print(f"DEBUG: Preferred language: '{user.preferred_language}'")
+        
+        # Send verification email
+        try:
+            email_result = send_verification_email(
+                user_email=user.email,
+                user_name=user_full_name,
+                verification_token=verification_token,
+                language=user.preferred_language
+            )
+            
+            print(f"DEBUG: Email result: {email_result}")
+            
+            if not email_result.get('success', False):
+                current_app.logger.error(f"Failed to send verification email: {email_result}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to send verification email'
+                }), 500
+                
+        except Exception as email_error:
+            current_app.logger.error(f"Email sending error: {str(email_error)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'success': False,
+                'message': 'Failed to send verification email'
+            }), 500
+        
+        # Log audit action
+        log_audit_action(
+            user.id,
+            'verification_email_resent',
+            'user',
+            user.id,
+            f"Verification email resent for {user.email}"
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Verification email sent successfully'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Resend verification error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': 'Failed to resend verification email'
+        }), 500
+
+
