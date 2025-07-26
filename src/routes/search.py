@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app
 from sqlalchemy import func, and_, or_
 
-from src.models import db, Product, Pharmacy, PharmacyProduct, ProductCategory
+from src.models import db, Product, Pharmacy, ProductCategory
 from src.utils.validation import sanitize_string
 
 search_bp = Blueprint('search', __name__)
