@@ -119,7 +119,6 @@ def send_verification_email(user_email, user_name, verification_token, language=
     try:
         # Get base URL from environment
         base_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-        base_url = base_url.rstrip('/')
         verification_url = f"{base_url}/verify-email?token={verification_token}"
         
         # Debug logging
@@ -412,7 +411,6 @@ def send_password_reset_email(user_email, user_name, reset_token, language='en')
     """
     try:
         base_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-        base_url = base_url.rstrip('/')
         reset_url = f"{base_url}/reset-password?token={reset_token}"
         
         if language == 'ar':
