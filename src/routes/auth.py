@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
 import secrets
-
+import re
 from src.models import db, User, UserAddress, Pharmacy, UserType
 from src.utils.validation import validate_email, validate_password, validate_phone
 from src.utils.auth import log_audit_action
