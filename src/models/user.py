@@ -122,7 +122,7 @@ class User(BaseModel):
         if not include_sensitive:
             data.pop('password_hash', None)
             data.pop('verification_token', None)
-        data['full_name'] = self.get_full_name()
+        data['full_name'] = self.get_full_name
         data['user_type'] = self.user_type.value if self.user_type else None
         data['email_verified'] = self.is_verified  # Alias for compatibility
         return data
