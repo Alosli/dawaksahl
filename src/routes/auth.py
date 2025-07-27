@@ -3,7 +3,7 @@ from flask_jwt_extended import create_access_token, create_refresh_token, jwt_re
 from datetime import datetime, timedelta
 import secrets
 
-from src.models import db, User, UserAddress, Pharmacy, UserType
+from src.models import db, User, UserAddress, Pharmacy, UserType, PharmacyStatus
 from src.utils.validation import validate_email, validate_password, validate_phone
 from src.utils.auth import log_audit_action
 from src.utils.email import send_verification_email, send_password_reset_email
@@ -239,6 +239,11 @@ def verify_email():
         user.is_verified = True
         user.verification_token = None  # Clear the token
         user.updated_at = datetime.utcnow()
+        if user.user_type == UserType.SELLER and user.pharmacy:
+            user.pharmacy.is_verified = True
+            user.pharmacy.verification_date = datetime.utcnow()
+            user.pharmacy.status = PharmacyStatus.VERIFIED
+            user.pharmacy.updated_at = datetime.utcnow()
         db.session.commit()
         
         # Create access tokens for automatic login
