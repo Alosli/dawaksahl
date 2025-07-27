@@ -142,7 +142,7 @@ def register():
         
         # Debug logging before sending email
         user_full_name = user.get_full_name
-        verification_token = user.email_verification_token
+        verification_token = user.verification_token
         print(f"DEBUG: About to send email to {user.email}")
         print(f"DEBUG: User full name: '{user_full_name}'")
         print(f"DEBUG: Verification token: '{verification_token}'")
