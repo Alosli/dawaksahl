@@ -567,33 +567,60 @@ def remove_pharmacy_product(pharmacy_product_id):
         db.session.rollback()
         current_app.logger.error(f"Remove pharmacy product error: {str(e)}")
         return jsonify({'error': 'Failed to remove product from inventory'}), 500
+
+
+
 @pharmacies_bp.route('/my-pharmacy', methods=['GET'])
 @jwt_required()
 def get_my_pharmacy():
     """Get current seller's pharmacy data"""
     try:
+        print("🔍 my-pharmacy endpoint called")
+        
+        # Check if JWT identity is available
+        from flask_jwt_extended import get_jwt_identity
+        current_user_id = get_jwt_identity()
+        print(f"🔍 JWT Identity: {current_user_id}")
+        
         user = get_current_user()
+        print(f"🔍 Current user: {user}")
+        
+        if not user:
+            print("❌ No user found")
+            return jsonify({
+                'success': False,
+                'message': 'User not found'
+            }), 404
+        
+        print(f"🔍 User type: {user.user_type}")
         
         if user.user_type != UserType.SELLER:
+            print("❌ User is not a seller")
             return jsonify({
                 'success': False,
                 'message': 'Only sellers can access pharmacy data'
             }), 403
         
         pharmacy = user.pharmacy
+        print(f"🔍 User pharmacy: {pharmacy}")
+        
         if not pharmacy:
+            print("❌ No pharmacy found for seller")
             return jsonify({
                 'success': False,
                 'message': 'No pharmacy found for this seller'
             }), 404
         
+        print("✅ Returning pharmacy data")
         return jsonify({
             'success': True,
             'data': pharmacy.to_dict()
         }), 200
         
     except Exception as e:
-        print(f"Get my pharmacy error: {str(e)}")
+        print(f"❌ Get my pharmacy error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'message': 'Failed to get pharmacy data'
@@ -662,4 +689,3 @@ def get_pharmacy_stats():
             'success': False,
             'message': 'Failed to get pharmacy statistics'
         }), 500
-
