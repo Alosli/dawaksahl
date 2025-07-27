@@ -109,17 +109,18 @@ def register():
                     }), 400
             
             pharmacy = Pharmacy(
-                seller_id=user.id,
-                name=pharmacy_data['name'],
-                name_ar=pharmacy_data.get('name_ar'),
-                district_id=pharmacy_data['district_id'],
-                address=pharmacy_data['address'],
-                phone=pharmacy_data['phone'],
+                owner_id=user.id,
+                pharmacy_name=pharmacy_data['name'],
+                pharmacy_name_ar=pharmacy_data.get('name_ar'),
+                phone_number=pharmacy_data['phone'],
                 email=pharmacy_data.get('email'),
                 description=pharmacy_data.get('description'),
                 description_ar=pharmacy_data.get('description_ar'),
-                latitude=pharmacy_data.get('latitude'),
-                longitude=pharmacy_data.get('longitude')
+                license_number=pharmacy_data.get('license_number'),
+                website_url=pharmacy_data.get('website'),
+                is_verified=False,
+                verification_status='pending',
+                is_active=True
             )
             db.session.add(pharmacy)
         
