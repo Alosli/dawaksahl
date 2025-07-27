@@ -114,7 +114,6 @@ def register():
                 name_ar=pharmacy_data.get('name_ar'),
                 district_id=pharmacy_data['district_id'],
                 address=pharmacy_data['address'],
-                address_ar=pharmacy_data.get('address_ar'),
                 phone=pharmacy_data['phone'],
                 email=pharmacy_data.get('email'),
                 description=pharmacy_data.get('description'),
