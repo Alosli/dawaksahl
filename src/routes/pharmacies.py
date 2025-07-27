@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from datetime import time
 
-from src.models import db, Pharmacy, PharmacyDocument, Product, PharmacyStatus
+from src.models import db, Pharmacy, PharmacyDocument, Product, PharmacyStatus, UserType
 from src.utils.auth import get_current_user, log_audit_action, require_seller, require_seller_or_admin, can_access_pharmacy
 from src.utils.validation import validate_required_fields, validate_coordinates, validate_price, validate_quantity, sanitize_string
 
@@ -567,4 +567,99 @@ def remove_pharmacy_product(pharmacy_product_id):
         db.session.rollback()
         current_app.logger.error(f"Remove pharmacy product error: {str(e)}")
         return jsonify({'error': 'Failed to remove product from inventory'}), 500
+@pharmacies_bp.route('/my-pharmacy', methods=['GET'])
+@jwt_required()
+def get_my_pharmacy():
+    """Get current seller's pharmacy data"""
+    try:
+        user = get_current_user()
+        
+        if user.user_type != UserType.SELLER:
+            return jsonify({
+                'success': False,
+                'message': 'Only sellers can access pharmacy data'
+            }), 403
+        
+        pharmacy = user.pharmacy
+        if not pharmacy:
+            return jsonify({
+                'success': False,
+                'message': 'No pharmacy found for this seller'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'data': pharmacy.to_dict()
+        }), 200
+        
+    except Exception as e:
+        print(f"Get my pharmacy error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get pharmacy data'
+        }), 500
+
+@pharmacies_bp.route('/stats', methods=['GET'])
+@jwt_required()
+def get_pharmacy_stats():
+    """Get pharmacy statistics for current seller"""
+    try:
+        user = get_current_user()
+        
+        if user.user_type != UserType.SELLER:
+            return jsonify({
+                'success': False,
+                'message': 'Only sellers can access pharmacy stats'
+            }), 403
+        
+        pharmacy = user.pharmacy
+        if not pharmacy:
+            return jsonify({
+                'success': False,
+                'message': 'No pharmacy found for this seller'
+            }), 404
+        
+        # Calculate real statistics
+        from src.models import Order, Product
+        
+        # Total orders for this pharmacy
+        total_orders = Order.query.filter_by(pharmacy_id=pharmacy.id).count()
+        
+        # Active products count
+        active_products = Product.query.filter_by(
+            pharmacy_id=pharmacy.id,
+            is_active=True
+        ).count()
+        
+        # Total sales (sum of completed orders)
+        completed_orders = Order.query.filter_by(
+            pharmacy_id=pharmacy.id,
+            status='completed'
+        ).all()
+        
+        total_sales = sum(order.total_amount for order in completed_orders)
+        
+        # Unique customers (distinct customer IDs from orders)
+        unique_customers = db.session.query(Order.customer_id).filter_by(
+            pharmacy_id=pharmacy.id
+        ).distinct().count()
+        
+        stats = {
+            'totalSales': f'{total_sales:,.0f} YER',
+            'totalOrders': str(total_orders),
+            'activeProducts': str(active_products),
+            'totalCustomers': str(unique_customers)
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': stats
+        }), 200
+        
+    except Exception as e:
+        print(f"Get pharmacy stats error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get pharmacy statistics'
+        }), 500
 
